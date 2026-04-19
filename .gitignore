@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Claude Code
+.claude/
+.claude-local/
+
+# Logs / env
+*.log
+.env
+.env.*
+!.env.example
+
+# Node (for future sub-apps)
+node_modules/
+dist/
+build/
+.next/
+.cache/
