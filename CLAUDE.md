@@ -13,7 +13,9 @@ playground/
 └── README.md
 ```
 
-Future individual apps (e.g. Layout Designer) should live in their own subdirectories (e.g. `layout-designer/`) with their own stacks and styles.
+Future individual apps should live in their own subdirectories with their own stacks and styles. The first is [`floor-plan-designer/`](./floor-plan-designer/) — a Next.js 16 + react-konva + Zustand app for retail floor planning. See its own `CLAUDE.md` / `AGENTS.md`.
+
+The root `build.sh` + `vercel.json` combine the landing page and the static Next.js export into a single `dist/` for Vercel. Do not commit `dist/` or `floor-plan-designer/out/`.
 
 ## Stack
 
