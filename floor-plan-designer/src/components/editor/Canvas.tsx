@@ -10,7 +10,21 @@ import { useSpaceKey } from "@/hooks/useSpaceKey";
 import { GridBackground } from "./GridBackground";
 import { RoomPolygon } from "./RoomPolygon";
 import { MeasurementOverlay } from "./MeasurementOverlay";
-import { EDITOR_COLORS } from "@/lib/constants";
+import { ArchElementNode } from "./ArchElement";
+import {
+  EDITOR_COLORS,
+  ARCH_ELEMENT_DEFAULTS,
+  SHELF_DEFAULTS,
+} from "@/lib/constants";
+import {
+  LIBRARY_MIME,
+  type LibraryPayload,
+} from "@/components/panels/ElementLibrary";
+import {
+  archElementBox,
+  shelfBox,
+  findNonCollidingPosition,
+} from "@/lib/collision";
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 4;
@@ -23,9 +37,14 @@ export default function Canvas() {
 
   const view = useLayoutStore((s) => s.view);
   const room = useLayoutStore((s) => s.room);
+  const archElements = useLayoutStore((s) => s.archElements);
+  const selection = useLayoutStore((s) => s.selection);
   const setZoom = useLayoutStore((s) => s.setZoom);
   const setPan = useLayoutStore((s) => s.setPan);
   const fitToRoom = useLayoutStore((s) => s.fitToRoom);
+  const addArchElement = useLayoutStore((s) => s.addArchElement);
+  const addShelf = useLayoutStore((s) => s.addShelf);
+  const clearSelection = useLayoutStore((s) => s.clearSelection);
 
   const spaceHeld = useSpaceKey();
   const [middleHeld, setMiddleHeld] = useState(false);
@@ -41,7 +60,6 @@ export default function Canvas() {
     return () => ro.disconnect();
   }, []);
 
-  // Initial fit once the stage has a known size.
   const didInitialFit = useRef(false);
   useEffect(() => {
     if (didInitialFit.current) return;
@@ -51,7 +69,6 @@ export default function Canvas() {
     }
   }, [size.width, size.height, fitToRoom]);
 
-  // Toolbar emits a window event to request a fit (avoids prop drilling).
   useEffect(() => {
     const handler = () => fitToRoom(size.width, size.height);
     window.addEventListener("fpd:fit-to-room", handler);
@@ -99,22 +116,120 @@ export default function Canvas() {
 
   const handleStageDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
-      // Only commit pan from Stage drag — not from dragging a child element.
-      if (e.target === stageRef.current) {
-        setPan(e.target.x(), e.target.y());
-      }
+      if (e.target === stageRef.current) setPan(e.target.x(), e.target.y());
+    },
+    [setPan],
+  );
+  const handleStageDragMove = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (e.target === stageRef.current) setPan(e.target.x(), e.target.y());
     },
     [setPan],
   );
 
-  const handleStageDragMove = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
+  // Empty-space click clears selection.
+  const handleStageClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
       if (e.target === stageRef.current) {
-        setPan(e.target.x(), e.target.y());
+        clearSelection();
       }
     },
-    [setPan],
+    [clearSelection],
   );
+
+  // HTML5 drop from the library.
+  const screenToInches = (clientX: number, clientY: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
+    return {
+      x: (screenX - view.panX) / effectivePPI,
+      y: (screenY - view.panY) / effectivePPI,
+    };
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData(LIBRARY_MIME);
+    if (!raw) return;
+    let payload: LibraryPayload;
+    try {
+      payload = JSON.parse(raw) as LibraryPayload;
+    } catch {
+      return;
+    }
+    const dropPoint = screenToInches(e.clientX, e.clientY);
+    if (!dropPoint) return;
+
+    const shelvingSegments = useLayoutStore.getState().shelvingSegments;
+
+    if (payload.kind === "arch") {
+      const defaults = ARCH_ELEMENT_DEFAULTS[payload.type];
+      const box = {
+        x: dropPoint.x,
+        y: dropPoint.y,
+        width: defaults.widthInches,
+        height: defaults.depthInches,
+        rotation: 0,
+      };
+      const placed = findNonCollidingPosition(box, {
+        selfId: null,
+        archElements,
+        shelvingSegments,
+        roomVertices: room.polygonVertices,
+      });
+      const id = addArchElement({
+        type: payload.type,
+        x: placed.x,
+        y: placed.y,
+        rotation: placed.rotation,
+        widthInches: defaults.widthInches,
+        depthInches: defaults.depthInches,
+      });
+      useLayoutStore
+        .getState()
+        .setSelection([{ type: "archElement", id }]);
+    } else if (payload.kind === "shelf") {
+      const defaults = SHELF_DEFAULTS[payload.type];
+      const box = {
+        x: dropPoint.x,
+        y: dropPoint.y,
+        width: defaults.lengthInches,
+        height: defaults.widthInches,
+        rotation: 0,
+      };
+      const placed = findNonCollidingPosition(box, {
+        selfId: null,
+        archElements,
+        shelvingSegments,
+        roomVertices: room.polygonVertices,
+      });
+      const id = addShelf({
+        type: payload.type,
+        lengthInches: defaults.lengthInches,
+        widthInches: defaults.widthInches,
+        heightInches: defaults.heightInches,
+        x: placed.x,
+        y: placed.y,
+        rotation: placed.rotation,
+        powerSource: { connectedOutletId: null, daisyChainedFrom: null },
+        snappedConnections: { leftId: null, rightId: null },
+      });
+      useLayoutStore.getState().setSelection([{ type: "shelf", id }]);
+    }
+    // Keep for Step 4 reference — suppresses unused lint.
+    void shelfBox;
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes(LIBRARY_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  const selectedIds = new Set(selection.map((s) => s.id));
 
   return (
     <div
@@ -124,6 +239,8 @@ export default function Canvas() {
         background: EDITOR_COLORS.canvas,
         cursor: panMode ? "grab" : "default",
       }}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
     >
       {size.width > 0 && size.height > 0 ? (
         <Stage
@@ -136,6 +253,10 @@ export default function Canvas() {
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
+          onClick={handleStageClick}
+          onTap={(e) => {
+            if (e.target === stageRef.current) clearSelection();
+          }}
           onDragMove={handleStageDragMove}
           onDragEnd={handleStageDragEnd}
         >
@@ -156,6 +277,14 @@ export default function Canvas() {
               wallThicknessInches={room.wallThicknessInches}
               interactive={!panMode}
             />
+            {archElements.map((el) => (
+              <ArchElementNode
+                key={el.id}
+                element={el}
+                pixelsPerInch={effectivePPI}
+                selected={selectedIds.has(el.id)}
+              />
+            ))}
             {view.showMeasurements ? (
               <MeasurementOverlay
                 vertices={room.polygonVertices}
