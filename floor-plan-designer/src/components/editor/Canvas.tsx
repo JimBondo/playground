@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Stage, Layer } from "react-konva";
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
+import { setStage } from "@/lib/stageRef";
 
 import { useLayoutStore } from "@/store/useLayoutStore";
 import { useEditorStore } from "@/store/useEditorStore";
@@ -72,6 +73,11 @@ export default function Canvas() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  useEffect(() => {
+    setStage(stageRef.current);
+    return () => setStage(null);
+  }, [size.width, size.height]);
 
   const didInitialFit = useRef(false);
   useEffect(() => {
