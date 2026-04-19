@@ -21,7 +21,7 @@ export interface SelectionBoxState {
 }
 
 export interface WireInProgress {
-  startShelfId: string;
+  startElementId: string;
   joints: Point[]; // stored in inches
   cursor: Point | null; // tentative next point while user moves mouse
 }
@@ -57,8 +57,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   setAlignmentGuides: (g) => set({ alignmentGuides: g }),
   setSelectionBox: (b) => set({ selectionBox: b }),
   setShiftHeld: (v) => set({ shiftHeld: v }),
-  startWire: (shelfId) =>
-    set({ wireInProgress: { startShelfId: shelfId, joints: [], cursor: null } }),
+  startWire: (elementId) =>
+    set({
+      wireInProgress: { startElementId: elementId, joints: [], cursor: null },
+    }),
   pushWireJoint: (p) =>
     set((s) =>
       s.wireInProgress

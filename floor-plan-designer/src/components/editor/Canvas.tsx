@@ -4,14 +4,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Stage, Layer } from "react-konva";
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { setStage } from "@/lib/stageRef";
 
 import { useLayoutStore } from "@/store/useLayoutStore";
 import { useEditorStore } from "@/store/useEditorStore";
 import { useSpaceKey } from "@/hooks/useSpaceKey";
 import { GridBackground } from "./GridBackground";
 import { RoomPolygon } from "./RoomPolygon";
-import { MeasurementOverlay } from "./MeasurementOverlay";
 import { ArchElementNode } from "./ArchElement";
 import { ShelfSegmentNode } from "./ShelfSegment";
 import { AlignmentGuides } from "./AlignmentGuides";
@@ -32,11 +30,13 @@ import {
   findNonCollidingPosition,
   rotatedAabb,
 } from "@/lib/collision";
+import { findNearestWall } from "@/lib/wallSnap";
 import type { Selection } from "@/types";
+import { setStage } from "@/lib/stageRef";
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 4;
-const ZOOM_FACTOR = 1.1;
+const WHEEL_FACTOR = 1.1;
 
 export default function Canvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -89,10 +89,29 @@ export default function Canvas() {
   }, [size.width, size.height, fitToRoom]);
 
   useEffect(() => {
-    const handler = () => fitToRoom(size.width, size.height);
-    window.addEventListener("fpd:fit-to-room", handler);
-    return () => window.removeEventListener("fpd:fit-to-room", handler);
-  }, [fitToRoom, size.width, size.height]);
+    const fit = () => fitToRoom(size.width, size.height);
+    const centered = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { factor: number };
+      const f = detail?.factor ?? 1;
+      const cx = size.width / 2;
+      const cy = size.height / 2;
+      const s = useLayoutStore.getState();
+      const oldZoom = s.view.zoom;
+      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, oldZoom * f));
+      if (newZoom === oldZoom) return;
+      const basePPI = s.view.basePixelsPerInch;
+      const worldX = (cx - s.view.panX) / (basePPI * oldZoom);
+      const worldY = (cy - s.view.panY) / (basePPI * oldZoom);
+      setZoom(newZoom);
+      setPan(cx - worldX * basePPI * newZoom, cy - worldY * basePPI * newZoom);
+    };
+    window.addEventListener("fpd:fit-to-room", fit);
+    window.addEventListener("fpd:centered-zoom", centered);
+    return () => {
+      window.removeEventListener("fpd:fit-to-room", fit);
+      window.removeEventListener("fpd:centered-zoom", centered);
+    };
+  }, [fitToRoom, size.width, size.height, setZoom, setPan]);
 
   const effectivePPI = view.basePixelsPerInch * view.zoom;
 
@@ -107,23 +126,23 @@ export default function Canvas() {
       const direction = e.evt.deltaY < 0 ? 1 : -1;
       const newZoom =
         direction > 0
-          ? Math.min(ZOOM_MAX, oldZoom * ZOOM_FACTOR)
-          : Math.max(ZOOM_MIN, oldZoom / ZOOM_FACTOR);
+          ? Math.min(ZOOM_MAX, oldZoom * WHEEL_FACTOR)
+          : Math.max(ZOOM_MIN, oldZoom / WHEEL_FACTOR);
       if (newZoom === oldZoom) return;
       const basePPI = view.basePixelsPerInch;
       const worldX = (pointer.x - view.panX) / (basePPI * oldZoom);
       const worldY = (pointer.y - view.panY) / (basePPI * oldZoom);
-      const newPanX = pointer.x - worldX * basePPI * newZoom;
-      const newPanY = pointer.y - worldY * basePPI * newZoom;
       setZoom(newZoom);
-      setPan(newPanX, newPanY);
+      setPan(
+        pointer.x - worldX * basePPI * newZoom,
+        pointer.y - worldY * basePPI * newZoom,
+      );
     },
     [view.zoom, view.panX, view.panY, view.basePixelsPerInch, setZoom, setPan],
   );
 
   const panMode = spaceHeld || middleHeld;
 
-  // ----- Selection-box drag -----
   const handleStageMouseDown = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       if (e.evt.button === 1) {
@@ -133,12 +152,10 @@ export default function Canvas() {
       }
       if (panMode) return;
       if (e.target !== stageRef.current) return;
-      // Start selection box in stage-local coords.
       const stage = stageRef.current;
       if (!stage) return;
       const pointer = stage.getPointerPosition();
       if (!pointer) return;
-      // Pointer is viewport-relative; subtract stage position to get local.
       const stageX = pointer.x - stage.x();
       const stageY = pointer.y - stage.y();
       setSelectionBox({
@@ -159,7 +176,6 @@ export default function Canvas() {
     if (!pointer) return;
     const stageX = pointer.x - stage.x();
     const stageY = pointer.y - stage.y();
-    // Update wire cursor preview if we're drawing one.
     const wip = useEditorStore.getState().wireInProgress;
     if (wip) {
       const ppi = view.basePixelsPerInch * view.zoom;
@@ -183,9 +199,7 @@ export default function Canvas() {
       const y1 = Math.min(box.startY, box.currentY);
       const x2 = Math.max(box.startX, box.currentX);
       const y2 = Math.max(box.startY, box.currentY);
-      // Ignore tiny boxes (treat as click).
       if (x2 - x1 < 3 && y2 - y1 < 3) return;
-      // Convert box to inches and test containment.
       const s = useLayoutStore.getState();
       const ppi = s.view.basePixelsPerInch * s.view.zoom;
       const inchBox = {
@@ -239,7 +253,6 @@ export default function Canvas() {
     (e: KonvaEventObject<MouseEvent>) => {
       if (panMode) return;
       const mode = useLayoutStore.getState().view.activeMode;
-      // In wire mode, empty-space click adds a joint.
       if (mode === "wire" && e.target === stageRef.current) {
         const wip = useEditorStore.getState().wireInProgress;
         if (!wip) return;
@@ -260,10 +273,15 @@ export default function Canvas() {
         if (!e.evt.shiftKey) clearSelection();
       }
     },
-    [clearSelection, panMode, selectionBoxState, view.basePixelsPerInch, view.zoom],
+    [
+      clearSelection,
+      panMode,
+      selectionBoxState,
+      view.basePixelsPerInch,
+      view.zoom,
+    ],
   );
 
-  // ----- Library drop -----
   const screenToInches = (clientX: number, clientY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return null;
@@ -290,12 +308,35 @@ export default function Canvas() {
 
     if (payload.kind === "arch") {
       const defaults = ARCH_ELEMENT_DEFAULTS[payload.type];
+      let x = dropPoint.x;
+      let y = dropPoint.y;
+      let rotation = 0;
+
+      // Doors must sit on a wall.
+      if (payload.type === "singleDoor" || payload.type === "doubleDoor") {
+        const wall = findNearestWall(dropPoint, storeState.room.polygonVertices);
+        if (!wall) {
+          window.dispatchEvent(
+            new CustomEvent("fpd:toast", {
+              detail: {
+                kind: "warn",
+                message: "Doors must be placed on a wall — drag closer to one.",
+              },
+            }),
+          );
+          return;
+        }
+        x = wall.projected.x;
+        y = wall.projected.y;
+        rotation = wall.angle;
+      }
+
       const box = {
-        x: dropPoint.x,
-        y: dropPoint.y,
+        x,
+        y,
         width: defaults.widthInches,
         height: defaults.depthInches,
-        rotation: 0,
+        rotation,
       };
       const placed = findNonCollidingPosition(box, {
         selfId: null,
@@ -310,11 +351,20 @@ export default function Canvas() {
         rotation: placed.rotation,
         widthInches: defaults.widthInches,
         depthInches: defaults.depthInches,
+        swingDirection:
+          payload.type === "singleDoor" || payload.type === "doubleDoor"
+            ? "inward"
+            : payload.type === "wallFridge"
+              ? "outward"
+              : undefined,
+        hingeSide:
+          payload.type === "singleDoor" || payload.type === "wallFridge"
+            ? "left"
+            : undefined,
       });
       setSelection([{ type: "archElement", id }]);
     } else {
       const defaults = SHELF_DEFAULTS[payload.type];
-      // Lit-shelf validation: require at least one outlet.
       if (
         payload.type === "litShelf" &&
         !storeState.archElements.some((e) => e.type === "outlet")
@@ -323,8 +373,7 @@ export default function Canvas() {
           new CustomEvent("fpd:toast", {
             detail: {
               kind: "warn",
-              message:
-                "Add an electrical outlet before placing lit shelves.",
+              message: "Add an electrical outlet before placing lit shelves.",
             },
           }),
         );
@@ -372,7 +421,7 @@ export default function Canvas() {
       ref={containerRef}
       className="relative h-full w-full"
       style={{
-        background: EDITOR_COLORS.canvas,
+        background: EDITOR_COLORS.canvasBg,
         cursor: panMode ? "grab" : "default",
       }}
       onDrop={handleDrop}
@@ -438,12 +487,6 @@ export default function Canvas() {
               />
             ))}
             <WireInProgressPreview pixelsPerInch={effectivePPI} />
-            {view.showMeasurements ? (
-              <MeasurementOverlay
-                vertices={room.polygonVertices}
-                pixelsPerInch={effectivePPI}
-              />
-            ) : null}
             <AlignmentGuides
               width={size.width}
               height={size.height}

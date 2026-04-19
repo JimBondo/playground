@@ -27,9 +27,7 @@ export function RoomPolygon({
   if (vertices.length < 3) return null;
 
   const flat: number[] = [];
-  for (const v of vertices) {
-    flat.push(v.x * pixelsPerInch, v.y * pixelsPerInch);
-  }
+  for (const v of vertices) flat.push(v.x * pixelsPerInch, v.y * pixelsPerInch);
 
   const onVertexDragEnd = (index: number) => (e: KonvaEventObject<DragEvent>) => {
     const node = e.target;
@@ -52,8 +50,7 @@ export function RoomPolygon({
       <Line
         points={flat}
         closed
-        fill={EDITOR_COLORS.room}
-        opacity={0.55}
+        fill={EDITOR_COLORS.roomFill}
         listening={false}
       />
       <Line
@@ -68,20 +65,16 @@ export function RoomPolygon({
       {interactive &&
         vertices.map((v, i) => {
           const next = vertices[(i + 1) % vertices.length];
-          const midIn: Point = {
-            x: (v.x + next.x) / 2,
-            y: (v.y + next.y) / 2,
-          };
+          const midIn: Point = { x: (v.x + next.x) / 2, y: (v.y + next.y) / 2 };
           return (
             <Circle
               key={`mid-${i}`}
               x={midIn.x * pixelsPerInch}
               y={midIn.y * pixelsPerInch}
-              radius={5}
-              fill={EDITOR_COLORS.accent}
-              stroke="#000"
-              strokeWidth={1}
-              opacity={0.75}
+              radius={4}
+              fill={EDITOR_COLORS.warning}
+              stroke="#ffffff"
+              strokeWidth={1.5}
               onMouseEnter={(e) => {
                 const stage = e.target.getStage();
                 if (stage) stage.container().style.cursor = "copy";
@@ -102,10 +95,10 @@ export function RoomPolygon({
             key={`v-${i}`}
             x={v.x * pixelsPerInch}
             y={v.y * pixelsPerInch}
-            radius={7}
-            fill={EDITOR_COLORS.selection}
-            stroke="#000"
-            strokeWidth={1}
+            radius={6}
+            fill="#ffffff"
+            stroke={EDITOR_COLORS.accent}
+            strokeWidth={2}
             draggable
             onMouseEnter={(e) => {
               const stage = e.target.getStage();

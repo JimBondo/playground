@@ -3,13 +3,26 @@
 import { Group, Line, Circle } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
-import type { PowerRoutingLine } from "@/types";
+import type { PowerRoutingLine, ArchElement, ShelvingSegment } from "@/types";
 import { useLayoutStore } from "@/store/useLayoutStore";
 import { useEditorStore } from "@/store/useEditorStore";
+import { EDITOR_COLORS } from "@/lib/constants";
 
 interface WireRouteProps {
   wire: PowerRoutingLine;
   pixelsPerInch: number;
+}
+
+function centerOf(
+  startElementId: string,
+  shelves: ShelvingSegment[],
+  arch: ArchElement[],
+): { x: number; y: number } | null {
+  const s = shelves.find((x) => x.id === startElementId);
+  if (s) return { x: s.x, y: s.y };
+  const a = arch.find((x) => x.id === startElementId);
+  if (a) return { x: a.x, y: a.y };
+  return null;
 }
 
 export function WireRoute({ wire, pixelsPerInch }: WireRouteProps) {
@@ -18,16 +31,16 @@ export function WireRoute({ wire, pixelsPerInch }: WireRouteProps) {
   const shelves = useLayoutStore((s) => s.shelvingSegments);
   const arch = useLayoutStore((s) => s.archElements);
 
-  const startShelf = shelves.find((s) => s.id === wire.startShelfId);
-  const endOutlet = arch.find((a) => a.id === wire.endOutletId);
-  if (!startShelf || !endOutlet) return null;
+  const start = centerOf(wire.startElementId, shelves, arch);
+  const end = arch.find((a) => a.id === wire.endOutletId);
+  if (!start || !end) return null;
 
   const points = [
-    startShelf.x * pixelsPerInch,
-    startShelf.y * pixelsPerInch,
+    start.x * pixelsPerInch,
+    start.y * pixelsPerInch,
     ...wire.joints.flatMap((j) => [j.x * pixelsPerInch, j.y * pixelsPerInch]),
-    endOutlet.x * pixelsPerInch,
-    endOutlet.y * pixelsPerInch,
+    end.x * pixelsPerInch,
+    end.y * pixelsPerInch,
   ];
 
   const onJointDragEnd = (index: number) => (e: KonvaEventObject<DragEvent>) => {
@@ -41,12 +54,10 @@ export function WireRoute({ wire, pixelsPerInch }: WireRouteProps) {
     <Group>
       <Line
         points={points}
-        stroke="#6366f1"
+        stroke={EDITOR_COLORS.wire}
         strokeWidth={2}
-        dash={[6, 4]}
         lineJoin="round"
         lineCap="round"
-        opacity={0.9}
         listening={false}
       />
       {wire.joints.map((j, i) => (
@@ -55,9 +66,9 @@ export function WireRoute({ wire, pixelsPerInch }: WireRouteProps) {
           x={j.x * pixelsPerInch}
           y={j.y * pixelsPerInch}
           radius={5}
-          fill="#6366f1"
-          stroke="#fff"
-          strokeWidth={1}
+          fill={EDITOR_COLORS.wireJoint}
+          stroke="#ffffff"
+          strokeWidth={1.5}
           draggable
           onDragEnd={onJointDragEnd(i)}
           onContextMenu={(e) => {
@@ -74,14 +85,14 @@ interface WireInProgressPreviewProps {
   pixelsPerInch: number;
 }
 
-/** Renders the in-flight wire while user is drawing. */
 export function WireInProgressPreview({
   pixelsPerInch,
 }: WireInProgressPreviewProps) {
   const shelves = useLayoutStore((s) => s.shelvingSegments);
+  const arch = useLayoutStore((s) => s.archElements);
   const wip = useEditorStore((s) => s.wireInProgress);
   if (!wip) return null;
-  const start = shelves.find((s) => s.id === wip.startShelfId);
+  const start = centerOf(wip.startElementId, shelves, arch);
   if (!start) return null;
 
   const pts: number[] = [start.x * pixelsPerInch, start.y * pixelsPerInch];
@@ -95,10 +106,10 @@ export function WireInProgressPreview({
   return (
     <Line
       points={pts}
-      stroke="#6366f1"
+      stroke={EDITOR_COLORS.wire}
       strokeWidth={2}
-      dash={[6, 4]}
-      opacity={0.8}
+      dash={[8, 4]}
+      opacity={0.9}
       listening={false}
     />
   );

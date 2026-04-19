@@ -8,14 +8,15 @@ import { ElementLibrary } from "@/components/panels/ElementLibrary";
 import { PropertiesPanel } from "@/components/panels/PropertiesPanel";
 import { Toaster } from "./Toaster";
 import { ContextMenu } from "./ContextMenu";
+import { MeasurementOverlay } from "./MeasurementOverlay";
 import { useLayoutStore } from "@/store/useLayoutStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const Canvas = dynamic(() => import("./Canvas"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center text-xs uppercase tracking-widest text-white/40">
-      booting canvas…
+    <div className="flex h-full w-full items-center justify-center text-[12px] text-slate-400">
+      Loading canvas…
     </div>
   ),
 });
@@ -24,15 +25,13 @@ export default function EditorShell() {
   useKeyboardShortcuts();
 
   const selection = useLayoutStore((s) => s.selection);
-  const shelvingSegments = useLayoutStore((s) => s.shelvingSegments);
   const view = useLayoutStore((s) => s.view);
+  const room = useLayoutStore((s) => s.room);
 
-  // Restoration toast on first mount.
   useEffect(() => {
-    const key = "floor-plan-designer";
     if (typeof window === "undefined") return;
     try {
-      if (window.localStorage.getItem(key)) {
+      if (window.localStorage.getItem("floor-plan-designer")) {
         window.dispatchEvent(
           new CustomEvent("fpd:toast", {
             detail: { kind: "info", message: "Restored from auto-save." },
@@ -44,28 +43,38 @@ export default function EditorShell() {
     }
   }, []);
 
-  const focusedShelfId =
-    selection.length === 1 && selection[0].type === "shelf"
-      ? selection[0].id
-      : null;
-  const focusedShelf = focusedShelfId
-    ? shelvingSegments.find((s) => s.id === focusedShelfId) ?? null
-    : null;
+  const effectivePPI = view.basePixelsPerInch * view.zoom;
+  const focused = selection.length === 1 ? selection[0] : null;
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-[#0b0612] text-white">
+    <div className="flex h-screen w-screen flex-col bg-slate-100 text-slate-900">
       <Toolbar />
       <div className="flex min-h-0 flex-1">
         <ElementLibrary />
-        <main className="relative min-w-0 flex-1">
+        <main className="relative min-w-0 flex-1 overflow-hidden">
           <Canvas />
-          {focusedShelf ? (
+          {view.showMeasurements ? (
+            <MeasurementOverlay
+              vertices={room.polygonVertices}
+              pixelsPerInch={effectivePPI}
+              panX={view.panX}
+              panY={view.panY}
+              showInlineInputs={true}
+            />
+          ) : null}
+          {focused ? (
             <ContextMenu
-              shelf={focusedShelf}
-              pixelsPerInch={view.basePixelsPerInch * view.zoom}
+              selected={focused}
+              pixelsPerInch={effectivePPI}
               panX={view.panX}
               panY={view.panY}
             />
+          ) : null}
+          {view.activeMode === "wire" ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-[12px] text-orange-900 shadow">
+              Wire mode — click a lit shelf / freezer / wall fridge, then click
+              an outlet. Press Esc to cancel.
+            </div>
           ) : null}
         </main>
         <PropertiesPanel />

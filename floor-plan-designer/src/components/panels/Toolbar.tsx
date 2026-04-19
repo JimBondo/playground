@@ -13,8 +13,14 @@ import {
 import { getStage } from "@/lib/stageRef";
 import { temporal } from "@/store/temporal";
 
-function iconButton(cls = "") {
-  return `h-8 rounded-none border border-white/20 px-3 font-mono text-[11px] uppercase tracking-widest text-white/70 transition-colors hover:border-[#00ffff] hover:text-[#00ffff] ${cls}`;
+function btn(active = false, extra = "") {
+  const base =
+    "inline-flex h-8 items-center rounded-md border px-3 text-[12px] font-medium transition-colors";
+  const active_ =
+    "border-[#2563eb] bg-[#2563eb] text-white hover:bg-[#1d4ed8]";
+  const idle =
+    "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100";
+  return `${base} ${active ? active_ : idle} ${extra}`;
 }
 
 export function Toolbar() {
@@ -38,6 +44,11 @@ export function Toolbar() {
 
   const triggerFit = () => {
     window.dispatchEvent(new CustomEvent("fpd:fit-to-room"));
+  };
+  const triggerCenteredZoom = (factor: number) => {
+    window.dispatchEvent(
+      new CustomEvent("fpd:centered-zoom", { detail: { factor } }),
+    );
   };
 
   const handleSave = () => {
@@ -113,11 +124,11 @@ export function Toolbar() {
     }
   };
 
-  // Listen for Cmd/Ctrl+S event from keyboard hook.
   useEffect(() => {
     const handler = () => handleSave();
     window.addEventListener("fpd:save", handler);
     return () => window.removeEventListener("fpd:save", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectName]);
 
   const shelfSelectionIds = selection
@@ -126,21 +137,21 @@ export function Toolbar() {
 
   return (
     <>
-      <header className="flex h-12 items-center justify-between border-b border-white/10 bg-black/40 px-4 text-xs uppercase tracking-widest text-white/80">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[#00ffff]">FPD</span>
-          <span className="text-white/40">//</span>
-          <span className="max-w-[18ch] truncate font-mono">{projectName}</span>
-          <button
-            onClick={() => setNewProjectOpen(true)}
-            className={iconButton("ml-2")}
-          >
+      <header className="flex h-12 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 text-sm text-slate-700">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="font-semibold text-slate-900">FPD</span>
+          <span className="text-slate-300">/</span>
+          <span className="max-w-[28ch] truncate" title={projectName}>
+            {projectName}
+          </span>
+          <div className="mx-2 h-5 w-px bg-slate-200" />
+          <button onClick={() => setNewProjectOpen(true)} className={btn()}>
             New
           </button>
-          <button onClick={handleSave} className={iconButton()} title="Save JSON (Cmd/Ctrl+S)">
+          <button onClick={handleSave} className={btn()} title="Save JSON (Ctrl+S)">
             Save
           </button>
-          <button onClick={handleLoadClick} className={iconButton()} title="Load JSON">
+          <button onClick={handleLoadClick} className={btn()} title="Load JSON">
             Load
           </button>
           <input
@@ -150,70 +161,83 @@ export function Toolbar() {
             className="hidden"
             onChange={handleLoad}
           />
-          <button onClick={handlePdf} className={iconButton()} title="Export PDF">
+          <button onClick={handlePdf} className={btn()} title="Export PDF">
             PDF
           </button>
-          <button
-            onClick={() => temporal.undo()}
-            className={iconButton()}
-            title="Undo (Cmd/Ctrl+Z)"
-          >
-            ↶
+          <div className="mx-2 h-5 w-px bg-slate-200" />
+          <button onClick={() => temporal.undo()} className={btn()} title="Undo (Ctrl+Z)">
+            ↶ Undo
           </button>
           <button
             onClick={() => temporal.redo()}
-            className={iconButton()}
-            title="Redo (Cmd/Ctrl+Shift+Z)"
+            className={btn()}
+            title="Redo (Ctrl+Shift+Z)"
           >
-            ↷
+            ↷ Redo
           </button>
         </div>
-        <div className="flex items-center gap-2 font-mono">
-          <span className="mr-2 text-white/60">{Math.round(areaSqFt)} sq ft</span>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-slate-500 tabular-nums">
+            {Math.round(areaSqFt)} ft²
+          </span>
+          <div className="mx-2 h-5 w-px bg-slate-200" />
           <button
-            onClick={() => setZoom(Math.max(0.25, zoom / 1.2))}
-            className={iconButton()}
+            onClick={() => triggerCenteredZoom(1 / 1.2)}
+            className={btn()}
             aria-label="Zoom out"
           >
             −
           </button>
-          <span className="w-14 text-center">{Math.round(zoom * 100)}%</span>
+          <span className="w-14 text-center tabular-nums text-slate-500">
+            {Math.round(zoom * 100)}%
+          </span>
           <button
-            onClick={() => setZoom(Math.min(4, zoom * 1.2))}
-            className={iconButton()}
+            onClick={() => triggerCenteredZoom(1.2)}
+            className={btn()}
             aria-label="Zoom in"
           >
             +
           </button>
-          <button onClick={triggerFit} className={iconButton()}>Fit</button>
-          <button onClick={toggleGrid} className={iconButton()}>
-            Grid: {showGrid ? "on" : "off"}
+          <button onClick={triggerFit} className={btn()} title="Fit to room (0)">
+            Fit
           </button>
-          <button onClick={toggleMeasurements} className={iconButton()}>
-            Dims: {showMeasurements ? "on" : "off"}
+          <div className="mx-2 h-5 w-px bg-slate-200" />
+          <button
+            onClick={toggleGrid}
+            className={btn(showGrid)}
+            title="Toggle grid (G)"
+          >
+            Grid
+          </button>
+          <button
+            onClick={toggleMeasurements}
+            className={btn(showMeasurements)}
+            title="Toggle measurements (M)"
+          >
+            Dims
           </button>
           <button
             onClick={() =>
               setActiveMode(activeMode === "wire" ? "select" : "wire")
             }
-            className={iconButton(
-              activeMode === "wire" ? "border-[#6366f1] text-[#6366f1]" : "",
-            )}
-            title="Wire Mode (W)"
+            className={btn(activeMode === "wire")}
+            title="Wire mode — click a lit shelf/freezer/fridge, then click an outlet (W)"
           >
             Wire
           </button>
           <button
             onClick={() => setElevationOpen(true)}
             disabled={shelfSelectionIds.length === 0}
-            className={iconButton(
+            className={btn(
+              false,
               shelfSelectionIds.length === 0
                 ? "cursor-not-allowed opacity-40"
                 : "",
             )}
-            title="View Front Elevation of selected shelves"
+            title="Front elevation of selected shelves"
           >
-            Elev
+            Elevation
           </button>
         </div>
       </header>

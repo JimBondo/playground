@@ -14,11 +14,11 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -33,41 +33,40 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="new-project-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl border-2 border-[#00ffff] bg-[#0b0612] p-6 shadow-[0_0_40px_rgba(0,255,255,0.3)]"
+        className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-2">
-          <h2
-            id="new-project-title"
-            className="font-mono text-lg uppercase tracking-widest text-[#00ffff]"
-          >
-            New Project — Pick a Template
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="new-project-title" className="text-lg font-semibold text-slate-900">
+            New project
           </h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="font-mono text-xs uppercase tracking-widest text-white/60 hover:text-[#ff00ff]"
+            className="rounded-md px-2 py-1 text-[12px] text-slate-500 hover:bg-slate-100"
           >
             Esc
           </button>
         </div>
+        <p className="mb-4 text-[13px] text-slate-500">
+          Pick a starting template. You can adjust the room shape, swap out
+          fixtures, and add more at any time.
+        </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {TEMPLATES.map((t) => (
             <button
               key={t.id}
               onClick={() => pick(t.id)}
-              className="group flex flex-col items-start border border-white/20 bg-black/40 p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-[#00ffff] hover:shadow-[0_0_15px_rgba(0,255,255,0.3)]"
+              className="flex flex-col items-start gap-1 rounded-md border border-slate-200 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#2563eb] hover:shadow-md"
             >
-              <span className="font-mono text-sm uppercase tracking-widest text-white group-hover:text-[#00ffff]">
+              <span className="text-[14px] font-semibold text-slate-900">
                 {t.name}
               </span>
-              <span className="mt-1 text-xs text-white/60">
-                {t.description}
-              </span>
+              <span className="text-[12px] text-slate-500">{t.description}</span>
             </button>
           ))}
         </div>

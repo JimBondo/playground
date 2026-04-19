@@ -39,7 +39,7 @@ describe("power propagation", () => {
     });
     const shelfId = useLayoutStore.getState().addShelf(litShelf());
     useLayoutStore.getState().addWire({
-      startShelfId: shelfId,
+      startElementId: shelfId,
       endOutletId: outletId,
       joints: [],
     });

@@ -43,12 +43,12 @@ export function Toaster() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`pointer-events-auto border px-3 py-2 font-mono text-xs uppercase tracking-widest shadow-[0_0_10px_rgba(0,255,255,0.2)] ${
+          className={`pointer-events-auto rounded-md border px-3 py-2 text-[13px] shadow-lg ${
             t.kind === "warn"
-              ? "border-[#ffaa33] bg-black/80 text-[#ffaa33]"
+              ? "border-amber-300 bg-amber-50 text-amber-900"
               : t.kind === "error"
-                ? "border-[#ff3b6b] bg-black/80 text-[#ff3b6b]"
-                : "border-[#00ffff] bg-black/80 text-[#00ffff]"
+                ? "border-red-300 bg-red-50 text-red-900"
+                : "border-slate-300 bg-white text-slate-800"
           }`}
         >
           {t.message}

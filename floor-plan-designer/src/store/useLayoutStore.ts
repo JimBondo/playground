@@ -8,7 +8,7 @@ import {
   DEFAULT_ROOM,
   DEFAULT_VIEW,
 } from "@/lib/constants";
-import { getTemplate, resolveArchSeed } from "@/lib/templates";
+import { getTemplate, resolveArchSeed, resolveShelfSeed } from "@/lib/templates";
 import { polygonSquareFeet } from "@/lib/geometry";
 import type {
   ArchElement,
@@ -205,7 +205,10 @@ export const useLayoutStore = create<LayoutStore>()(
               ...resolveArchSeed(seed),
               id: nanoid(),
             }));
-            s.shelvingSegments = [];
+            s.shelvingSegments = t.shelvingSegments.map((seed) => ({
+              ...resolveShelfSeed(seed),
+              id: nanoid(),
+            }));
             s.powerRoutingLines = [];
             s.selection = [];
             s.project = {
@@ -270,7 +273,7 @@ export const useLayoutStore = create<LayoutStore>()(
                 shelf.powerSource.daisyChainedFrom = null;
             }
             s.powerRoutingLines = s.powerRoutingLines.filter(
-              (w) => w.startShelfId !== id,
+              (w) => w.startElementId !== id,
             );
             s.project.lastModified = now();
           }),

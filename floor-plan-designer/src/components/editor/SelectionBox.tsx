@@ -17,10 +17,10 @@ export function SelectionBox() {
       y={y}
       width={w}
       height={h}
-      stroke={EDITOR_COLORS.selection}
+      stroke={EDITOR_COLORS.accent}
       strokeWidth={1}
       dash={[4, 3]}
-      fill={"rgba(0, 255, 255, 0.08)"}
+      fill={"rgba(37, 99, 235, 0.08)"}
       listening={false}
     />
   );

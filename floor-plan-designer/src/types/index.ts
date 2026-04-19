@@ -52,7 +52,10 @@ export interface ArchElement {
   rotation: number;
   widthInches: number;
   depthInches: number;
+  /** For doors and wall fridges: inward vs outward swing. */
   swingDirection?: "inward" | "outward";
+  /** For doors: which side the hinge sits on. Default "left". */
+  hingeSide?: "left" | "right";
 }
 
 export type ShelfType =
@@ -83,7 +86,8 @@ export interface ShelvingSegment {
 
 export interface PowerRoutingLine {
   id: string;
-  startShelfId: string;
+  /** Source: any electrical element (lit shelf, freezer, wall fridge). */
+  startElementId: string;
   endOutletId: string;
   joints: Point[];
 }

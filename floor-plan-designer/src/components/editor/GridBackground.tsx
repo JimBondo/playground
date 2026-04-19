@@ -12,11 +12,7 @@ interface GridBackgroundProps {
   offsetY: number;
 }
 
-/**
- * Infinite-feeling grid: lines are drawn across the viewport, aligned to the
- * origin in canvas-space. `offsetX/Y` are the current pan values so the grid
- * stays locked to the world, not the screen.
- */
+/** Minor grid every 12", major every 60" (5ft). Both locked to world origin. */
 export function GridBackground({
   width,
   height,
@@ -25,36 +21,57 @@ export function GridBackground({
   offsetX,
   offsetY,
 }: GridBackgroundProps) {
-  const step = gridSpacingInches * effectivePPI;
-  if (step <= 0) return null;
+  const minor = gridSpacingInches * effectivePPI;
+  if (minor <= 0) return null;
+  const major = minor * 5;
 
-  const startX = -((offsetX % step) + step) % step;
-  const startY = -((offsetY % step) + step) % step;
+  const startMinorX = -((offsetX % minor) + minor) % minor;
+  const startMinorY = -((offsetY % minor) + minor) % minor;
+  const startMajorX = -((offsetX % major) + major) % major;
+  const startMajorY = -((offsetY % major) + major) % major;
 
-  const verticals: number[] = [];
-  for (let x = startX; x <= width; x += step) verticals.push(x);
+  const minorVerticals: number[] = [];
+  for (let x = startMinorX; x <= width; x += minor) minorVerticals.push(x);
+  const minorHorizontals: number[] = [];
+  for (let y = startMinorY; y <= height; y += minor) minorHorizontals.push(y);
 
-  const horizontals: number[] = [];
-  for (let y = startY; y <= height; y += step) horizontals.push(y);
+  const majorVerticals: number[] = [];
+  for (let x = startMajorX; x <= width; x += major) majorVerticals.push(x);
+  const majorHorizontals: number[] = [];
+  for (let y = startMajorY; y <= height; y += major) majorHorizontals.push(y);
 
   return (
     <Group listening={false}>
-      {verticals.map((x, i) => (
+      {minorVerticals.map((x, i) => (
         <Line
-          key={`v${i}`}
+          key={`mv${i}`}
           points={[x, 0, x, height]}
           stroke={EDITOR_COLORS.grid}
           strokeWidth={1}
-          opacity={0.5}
         />
       ))}
-      {horizontals.map((y, i) => (
+      {minorHorizontals.map((y, i) => (
         <Line
-          key={`h${i}`}
+          key={`mh${i}`}
           points={[0, y, width, y]}
           stroke={EDITOR_COLORS.grid}
           strokeWidth={1}
-          opacity={0.5}
+        />
+      ))}
+      {majorVerticals.map((x, i) => (
+        <Line
+          key={`Mv${i}`}
+          points={[x, 0, x, height]}
+          stroke={EDITOR_COLORS.gridMajor}
+          strokeWidth={1}
+        />
+      ))}
+      {majorHorizontals.map((y, i) => (
+        <Line
+          key={`Mh${i}`}
+          points={[0, y, width, y]}
+          stroke={EDITOR_COLORS.gridMajor}
+          strokeWidth={1}
         />
       ))}
     </Group>

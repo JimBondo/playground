@@ -8,7 +8,7 @@ import type { ShelvingSegment } from "@/types";
 import { useLayoutStore } from "@/store/useLayoutStore";
 import { useEditorStore } from "@/store/useEditorStore";
 import { computeSnap, computeAlignmentGuides } from "@/hooks/useSnapEngine";
-import { collides, shelfBox } from "@/lib/collision";
+import { collides } from "@/lib/collision";
 import { EDITOR_COLORS, SHELF_DEFAULTS } from "@/lib/constants";
 
 interface ShelfSegmentProps {
@@ -17,13 +17,20 @@ interface ShelfSegmentProps {
   selected: boolean;
 }
 
-const TYPE_FILL: Record<ShelvingSegment["type"], string> = {
-  endCap: "#2a1b4e",
-  standard: "#1a103c",
-  pegBoard: "#120826",
-  litShelf: "#2c155a",
-  unlitShelf: "#1a103c",
-};
+function paletteFor(type: ShelvingSegment["type"]) {
+  switch (type) {
+    case "endCap":
+      return EDITOR_COLORS.shelfEndCap;
+    case "pegBoard":
+      return EDITOR_COLORS.shelfPegBoard;
+    case "litShelf":
+      return EDITOR_COLORS.shelfLit;
+    case "unlitShelf":
+    case "standard":
+    default:
+      return EDITOR_COLORS.shelf;
+  }
+}
 
 export function ShelfSegmentNode({
   shelf,
@@ -40,6 +47,7 @@ export function ShelfSegmentNode({
 
   const lengthPx = shelf.lengthInches * pixelsPerInch;
   const widthPx = shelf.widthInches * pixelsPerInch;
+  const palette = paletteFor(shelf.type);
 
   const isPowered = useMemo(
     () =>
@@ -52,7 +60,6 @@ export function ShelfSegmentNode({
     e.cancelBubble = true;
     const activeMode = useLayoutStore.getState().view.activeMode;
     if (activeMode === "wire" && shelf.type === "litShelf") {
-      // Only lit shelves can be wire sources.
       useEditorStore.getState().startWire(shelf.id);
       return;
     }
@@ -85,11 +92,7 @@ export function ShelfSegmentNode({
     const proposedY = e.target.y() / pixelsPerInch;
     const ctx = buildSnapCtx();
     const snap = computeSnap({ x: proposedX, y: proposedY }, ctx);
-    const guides = computeAlignmentGuides(
-      { x: snap.x, y: snap.y },
-      ctx,
-    );
-    setAlignmentGuides(guides);
+    setAlignmentGuides(computeAlignmentGuides({ x: snap.x, y: snap.y }, ctx));
     const box = {
       x: snap.x,
       y: snap.y,
@@ -113,7 +116,6 @@ export function ShelfSegmentNode({
       rotation: shelf.rotation,
       colliding: coll.collides,
     });
-    // Visually apply the snap so the drag feels magnetic.
     e.target.x(snap.x * pixelsPerInch);
     e.target.y(snap.y * pixelsPerInch);
   };
@@ -148,7 +150,8 @@ export function ShelfSegmentNode({
       leftId: snap.leftNeighborId,
       rightId: snap.rightNeighborId,
     };
-    // Clear old neighbors' references to us before rewiring.
+
+    // Clear stale neighbor references pointing at us.
     const storeBefore = useLayoutStore.getState();
     for (const other of storeBefore.shelvingSegments) {
       if (other.id === shelf.id) continue;
@@ -196,18 +199,17 @@ export function ShelfSegmentNode({
       }
     }
 
-    // Re-propagate power across the connection graph.
     useLayoutStore.getState().propagatePower();
   };
 
   const isBeingDragged = dragPreview?.id === shelf.id;
   const showCollision = isBeingDragged && dragPreview.colliding;
-  const fill = showCollision ? "#4a0a1e" : TYPE_FILL[shelf.type];
+  const fill = showCollision ? "#fee2e2" : palette.fill;
   const stroke = selected
-    ? EDITOR_COLORS.selection
+    ? EDITOR_COLORS.accent
     : showCollision
       ? EDITOR_COLORS.danger
-      : "#ffffff";
+      : palette.stroke;
 
   return (
     <Group
@@ -231,6 +233,17 @@ export function ShelfSegmentNode({
         if (stage) stage.container().style.cursor = "default";
       }}
     >
+      {shelf.type === "litShelf" ? (
+        <Rect
+          x={-lengthPx / 2 - 4}
+          y={-widthPx / 2 - 4}
+          width={lengthPx + 8}
+          height={widthPx + 8}
+          fill={EDITOR_COLORS.shelfLit.halo}
+          listening={false}
+        />
+      ) : null}
+
       <Rect
         x={-lengthPx / 2}
         y={-widthPx / 2}
@@ -238,54 +251,66 @@ export function ShelfSegmentNode({
         height={widthPx}
         fill={fill}
         stroke={stroke}
-        strokeWidth={selected ? 3 : 1.5}
+        strokeWidth={selected ? 2.5 : 1.5}
       />
 
-      {/* Lit shelf glow halo */}
-      {shelf.type === "litShelf" ? (
-        <Rect
-          x={-lengthPx / 2 - 6}
-          y={-widthPx / 2 - 6}
-          width={lengthPx + 12}
-          height={widthPx + 12}
-          stroke="#ffffee"
-          strokeWidth={2}
-          opacity={0.35}
-          listening={false}
-        />
+      {/* Internal shelf lines to make "shelf" legible at a glance. */}
+      {shelf.type !== "pegBoard" ? (
+        <>
+          <Line
+            points={[-lengthPx / 2 + 4, 0, lengthPx / 2 - 4, 0]}
+            stroke={palette.stroke}
+            strokeWidth={1}
+            opacity={0.45}
+          />
+          <Line
+            points={[-lengthPx / 2 + 4, -widthPx / 4, lengthPx / 2 - 4, -widthPx / 4]}
+            stroke={palette.stroke}
+            strokeWidth={1}
+            opacity={0.3}
+          />
+          <Line
+            points={[-lengthPx / 2 + 4, widthPx / 4, lengthPx / 2 - 4, widthPx / 4]}
+            stroke={palette.stroke}
+            strokeWidth={1}
+            opacity={0.3}
+          />
+        </>
       ) : null}
 
-      {/* Peg board dots */}
       {shelf.type === "pegBoard"
-        ? Array.from({ length: 6 }).map((_, i) => (
-            <Circle
-              key={i}
-              x={-lengthPx / 2 + ((i + 1) * lengthPx) / 7}
-              y={0}
-              radius={Math.min(2, widthPx / 8)}
-              fill="#ff00ff"
-              opacity={0.7}
-              listening={false}
-            />
-          ))
+        ? Array.from({ length: 12 }).map((_, col) =>
+            Array.from({ length: 3 }).map((_, row) => (
+              <Circle
+                key={`${col}-${row}`}
+                x={-lengthPx / 2 + ((col + 0.5) / 12) * lengthPx}
+                y={-widthPx / 2 + ((row + 0.5) / 3) * widthPx}
+                radius={Math.max(1, widthPx / 20)}
+                fill={palette.stroke}
+                opacity={0.55}
+                listening={false}
+              />
+            )),
+          )
         : null}
 
       <Text
         text={SHELF_DEFAULTS[shelf.type].label}
-        fontSize={10}
-        fill="#e0e0e0"
+        fontSize={Math.max(9, Math.min(12, lengthPx / 8))}
+        fill={EDITOR_COLORS.text}
         x={-lengthPx / 2 + 4}
         y={-widthPx / 2 + 4}
         listening={false}
       />
 
-      {/* Power indicator */}
       {shelf.type === "litShelf" ? (
         <Circle
           x={lengthPx / 2 - 6}
           y={-widthPx / 2 + 6}
           radius={4}
-          fill={isPowered ? "#33ff88" : "#ffaa33"}
+          fill={isPowered ? EDITOR_COLORS.powered : EDITOR_COLORS.unpowered}
+          stroke="#ffffff"
+          strokeWidth={1}
           listening={false}
         />
       ) : null}

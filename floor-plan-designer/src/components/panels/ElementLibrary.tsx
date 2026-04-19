@@ -16,41 +16,91 @@ function onDragStart(payload: LibraryPayload) {
   };
 }
 
+const ARCH_ORDER: ArchElementType[] = [
+  "singleDoor",
+  "doubleDoor",
+  "outlet",
+  "wallFridge",
+  "freezerChest",
+  "frontCounter",
+];
+
+const SHELF_ORDER: ShelfType[] = [
+  "standard",
+  "endCap",
+  "pegBoard",
+  "litShelf",
+  "unlitShelf",
+];
+
+function LibraryItem({
+  label,
+  note,
+  onDragStart: handler,
+}: {
+  label: string;
+  note?: string;
+  onDragStart: React.DragEventHandler;
+}) {
+  return (
+    <li
+      draggable
+      onDragStart={handler}
+      className="group flex cursor-grab select-none items-center justify-between rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-700 shadow-sm transition-colors hover:border-[#2563eb] hover:text-[#1d4ed8] active:cursor-grabbing"
+      title="Drag onto the canvas"
+    >
+      <span>{label}</span>
+      {note ? (
+        <span className="text-[10px] uppercase tracking-wide text-slate-400">
+          {note}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
 export function ElementLibrary() {
   return (
-    <aside className="flex w-56 shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 bg-black/30 p-4 text-xs uppercase tracking-widest text-white/70">
+    <aside className="flex w-60 shrink-0 flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 text-slate-700">
       <div>
-        <div className="mb-2 font-mono text-[#ff00ff]">Architectural</div>
-        <ul className="space-y-1 font-mono">
-          {(Object.keys(ARCH_ELEMENT_DEFAULTS) as ArchElementType[]).map(
-            (key) => (
-              <li
-                key={key}
-                draggable
-                onDragStart={onDragStart({ kind: "arch", type: key })}
-                className="cursor-grab border border-white/10 px-2 py-1 transition-colors hover:border-[#00ffff] hover:text-[#00ffff] active:cursor-grabbing"
-              >
-                {ARCH_ELEMENT_DEFAULTS[key].label}
-              </li>
-            ),
-          )}
-        </ul>
-      </div>
-      <div>
-        <div className="mb-2 font-mono text-[#ff00ff]">Shelving</div>
-        <ul className="space-y-1 font-mono">
-          {(Object.keys(SHELF_DEFAULTS) as ShelfType[]).map((key) => (
-            <li
-              key={key}
-              draggable
-              onDragStart={onDragStart({ kind: "shelf", type: key })}
-              className="cursor-grab border border-white/10 px-2 py-1 transition-colors hover:border-[#00ffff] hover:text-[#00ffff] active:cursor-grabbing"
-            >
-              {SHELF_DEFAULTS[key].label}
-            </li>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Architectural
+          </h2>
+        </div>
+        <ul className="flex flex-col gap-1.5">
+          {ARCH_ORDER.map((t) => (
+            <LibraryItem
+              key={t}
+              label={ARCH_ELEMENT_DEFAULTS[t].label}
+              note={
+                t === "singleDoor" || t === "doubleDoor" ? "wall" : undefined
+              }
+              onDragStart={onDragStart({ kind: "arch", type: t })}
+            />
           ))}
         </ul>
       </div>
+      <div>
+        <div className="mb-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Shelving
+          </h2>
+        </div>
+        <ul className="flex flex-col gap-1.5">
+          {SHELF_ORDER.map((t) => (
+            <LibraryItem
+              key={t}
+              label={SHELF_DEFAULTS[t].label}
+              note={t === "litShelf" ? "needs outlet" : undefined}
+              onDragStart={onDragStart({ kind: "shelf", type: t })}
+            />
+          ))}
+        </ul>
+      </div>
+      <p className="mt-auto text-[11px] leading-snug text-slate-400">
+        Drag items onto the floor plan. Doors snap to walls automatically.
+      </p>
     </aside>
   );
 }
