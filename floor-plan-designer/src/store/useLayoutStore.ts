@@ -8,7 +8,7 @@ import {
   DEFAULT_ROOM,
   DEFAULT_VIEW,
 } from "@/lib/constants";
-import { getTemplate } from "@/lib/templates";
+import { getTemplate, resolveArchSeed } from "@/lib/templates";
 import { polygonSquareFeet } from "@/lib/geometry";
 import type {
   ArchElement,
@@ -198,7 +198,10 @@ export const useLayoutStore = create<LayoutStore>()(
               polygonVertices: t.room.polygonVertices.map((v) => ({ ...v })),
               wallThicknessInches: t.room.wallThicknessInches,
             };
-            s.archElements = [];
+            s.archElements = t.archElements.map((seed) => ({
+              ...resolveArchSeed(seed),
+              id: nanoid(),
+            }));
             s.shelvingSegments = [];
             s.powerRoutingLines = [];
             s.selection = [];

@@ -163,6 +163,66 @@ describe("useLayoutStore — serialization", () => {
   });
 });
 
+describe("useLayoutStore — room vertices", () => {
+  beforeEach(resetStore);
+
+  it("updateVertex moves a single point", () => {
+    useLayoutStore.getState().updateVertex(0, { x: -50, y: -50 });
+    expect(useLayoutStore.getState().room.polygonVertices[0]).toEqual({
+      x: -50,
+      y: -50,
+    });
+  });
+
+  it("addVertex inserts after the given index", () => {
+    useLayoutStore.getState().addVertex(0, { x: 300, y: 0 });
+    const verts = useLayoutStore.getState().room.polygonVertices;
+    expect(verts).toHaveLength(5);
+    expect(verts[1]).toEqual({ x: 300, y: 0 });
+  });
+
+  it("removeVertex refuses to drop below 3 vertices", () => {
+    const { removeVertex } = useLayoutStore.getState();
+    removeVertex(0);
+    expect(useLayoutStore.getState().room.polygonVertices).toHaveLength(3);
+    removeVertex(0);
+    expect(useLayoutStore.getState().room.polygonVertices).toHaveLength(3);
+  });
+});
+
+describe("useLayoutStore — templates", () => {
+  beforeEach(resetStore);
+
+  it("loadTemplate replaces room + seeds arch elements", () => {
+    useLayoutStore.getState().loadTemplate("convenience-store");
+    const s = useLayoutStore.getState();
+    expect(s.room.polygonVertices).toHaveLength(4);
+    expect(s.archElements.length).toBeGreaterThan(0);
+    // All seeded elements must have an id.
+    for (const e of s.archElements) {
+      expect(typeof e.id).toBe("string");
+      expect(e.id.length).toBeGreaterThan(0);
+    }
+    expect(s.project.name).toBe("Convenience Store");
+  });
+
+  it("loadTemplate clears existing content", () => {
+    useLayoutStore.getState().addShelf({
+      type: "standard",
+      lengthInches: 48,
+      widthInches: 24,
+      heightInches: 84,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      powerSource: { connectedOutletId: null, daisyChainedFrom: null },
+      snappedConnections: { leftId: null, rightId: null },
+    });
+    useLayoutStore.getState().loadTemplate("blank-rect");
+    expect(useLayoutStore.getState().shelvingSegments).toHaveLength(0);
+  });
+});
+
 describe("useLayoutStore — view toggles", () => {
   beforeEach(resetStore);
 
