@@ -1,0 +1,43 @@
+{
+  "name": "floor-plan-designer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "immer": "^11.1.4",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
+    "konva": "^10.2.5",
+    "lucide-react": "^1.8.0",
+    "nanoid": "^5.1.9",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-konva": "^19.2.3",
+    "zundo": "^2.3.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "jsdom": "^29.0.2",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.4"
+  }
+}
