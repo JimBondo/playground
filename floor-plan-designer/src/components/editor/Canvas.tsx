@@ -15,6 +15,7 @@ import { ArchElementNode } from "./ArchElement";
 import { ShelfSegmentNode } from "./ShelfSegment";
 import { AlignmentGuides } from "./AlignmentGuides";
 import { SelectionBox } from "./SelectionBox";
+import { WireRoute, WireInProgressPreview } from "./WireRoute";
 import {
   EDITOR_COLORS,
   ARCH_ELEMENT_DEFAULTS,
@@ -45,6 +46,7 @@ export default function Canvas() {
   const room = useLayoutStore((s) => s.room);
   const archElements = useLayoutStore((s) => s.archElements);
   const shelvingSegments = useLayoutStore((s) => s.shelvingSegments);
+  const powerRoutingLines = useLayoutStore((s) => s.powerRoutingLines);
   const selection = useLayoutStore((s) => s.selection);
   const setZoom = useLayoutStore((s) => s.setZoom);
   const setPan = useLayoutStore((s) => s.setPan);
@@ -145,16 +147,25 @@ export default function Canvas() {
   );
 
   const handleStageMouseMove = useCallback(() => {
-    const box = useEditorStore.getState().selectionBox;
-    if (!box || !box.active) return;
     const stage = stageRef.current;
     if (!stage) return;
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
     const stageX = pointer.x - stage.x();
     const stageY = pointer.y - stage.y();
+    // Update wire cursor preview if we're drawing one.
+    const wip = useEditorStore.getState().wireInProgress;
+    if (wip) {
+      const ppi = view.basePixelsPerInch * view.zoom;
+      useEditorStore.getState().updateWireCursor({
+        x: stageX / ppi,
+        y: stageY / ppi,
+      });
+    }
+    const box = useEditorStore.getState().selectionBox;
+    if (!box || !box.active) return;
     setSelectionBox({ ...box, currentX: stageX, currentY: stageY });
-  }, [setSelectionBox]);
+  }, [setSelectionBox, view.basePixelsPerInch, view.zoom]);
 
   const handleStageMouseUp = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
@@ -221,12 +232,29 @@ export default function Canvas() {
   const handleStageClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       if (panMode) return;
-      // Only clear on pure empty-space click (not after a selection-box drag).
+      const mode = useLayoutStore.getState().view.activeMode;
+      // In wire mode, empty-space click adds a joint.
+      if (mode === "wire" && e.target === stageRef.current) {
+        const wip = useEditorStore.getState().wireInProgress;
+        if (!wip) return;
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+        const stageX = pointer.x - stage.x();
+        const stageY = pointer.y - stage.y();
+        const ppi = view.basePixelsPerInch * view.zoom;
+        useEditorStore.getState().pushWireJoint({
+          x: stageX / ppi,
+          y: stageY / ppi,
+        });
+        return;
+      }
       if (e.target === stageRef.current && !selectionBoxState?.active) {
         if (!e.evt.shiftKey) clearSelection();
       }
     },
-    [clearSelection, panMode, selectionBoxState],
+    [clearSelection, panMode, selectionBoxState, view.basePixelsPerInch, view.zoom],
   );
 
   // ----- Library drop -----
@@ -396,6 +424,14 @@ export default function Canvas() {
                 selected={selectedIds.has(sh.id)}
               />
             ))}
+            {powerRoutingLines.map((wire) => (
+              <WireRoute
+                key={wire.id}
+                wire={wire}
+                pixelsPerInch={effectivePPI}
+              />
+            ))}
+            <WireInProgressPreview pixelsPerInch={effectivePPI} />
             {view.showMeasurements ? (
               <MeasurementOverlay
                 vertices={room.polygonVertices}

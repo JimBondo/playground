@@ -50,6 +50,12 @@ export function ShelfSegmentNode({
 
   const handleClick = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    const activeMode = useLayoutStore.getState().view.activeMode;
+    if (activeMode === "wire" && shelf.type === "litShelf") {
+      // Only lit shelves can be wire sources.
+      useEditorStore.getState().startWire(shelf.id);
+      return;
+    }
     if (e.evt.shiftKey) {
       addToSelection({ type: "shelf", id: shelf.id });
     } else {
@@ -142,9 +148,26 @@ export function ShelfSegmentNode({
       leftId: snap.leftNeighborId,
       rightId: snap.rightNeighborId,
     };
-    updateShelf(shelf.id, { x: snap.x, y: snap.y, snappedConnections: connections });
+    // Clear old neighbors' references to us before rewiring.
+    const storeBefore = useLayoutStore.getState();
+    for (const other of storeBefore.shelvingSegments) {
+      if (other.id === shelf.id) continue;
+      const patch: Partial<ShelvingSegment["snappedConnections"]> = {};
+      if (other.snappedConnections.leftId === shelf.id) patch.leftId = null;
+      if (other.snappedConnections.rightId === shelf.id) patch.rightId = null;
+      if (Object.keys(patch).length > 0) {
+        storeBefore.updateShelf(other.id, {
+          snappedConnections: { ...other.snappedConnections, ...patch },
+        });
+      }
+    }
 
-    // Update the matched neighbor's opposite side to point back at us.
+    updateShelf(shelf.id, {
+      x: snap.x,
+      y: snap.y,
+      snappedConnections: connections,
+    });
+
     const storeNow = useLayoutStore.getState();
     if (snap.leftNeighborId) {
       const neighbor = storeNow.shelvingSegments.find(
@@ -172,6 +195,9 @@ export function ShelfSegmentNode({
         });
       }
     }
+
+    // Re-propagate power across the connection graph.
+    useLayoutStore.getState().propagatePower();
   };
 
   const isBeingDragged = dragPreview?.id === shelf.id;

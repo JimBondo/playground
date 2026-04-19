@@ -82,6 +82,9 @@ export interface LayoutActions {
   exportState: () => string;
   importState: (json: string) => { success: boolean; error?: string };
 
+  // Power propagation
+  propagatePower: () => void;
+
   // Room area
   getRoomAreaSqFt: () => number;
 }
@@ -484,6 +487,41 @@ export const useLayoutStore = create<LayoutStore>()(
             };
           }
         },
+
+        // Power propagation --------------------------------------------------
+        propagatePower: () =>
+          set((s) => {
+            const powered = new Set<string>();
+            for (const sh of s.shelvingSegments) {
+              if (sh.powerSource.connectedOutletId) powered.add(sh.id);
+            }
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const sh of s.shelvingSegments) {
+                if (powered.has(sh.id)) continue;
+                const neighbors: string[] = [];
+                if (sh.snappedConnections.leftId)
+                  neighbors.push(sh.snappedConnections.leftId);
+                if (sh.snappedConnections.rightId)
+                  neighbors.push(sh.snappedConnections.rightId);
+                for (const nid of neighbors) {
+                  if (powered.has(nid)) {
+                    powered.add(sh.id);
+                    sh.powerSource.daisyChainedFrom = nid;
+                    changed = true;
+                    break;
+                  }
+                }
+              }
+            }
+            // Clear daisy chain for shelves no longer reachable.
+            for (const sh of s.shelvingSegments) {
+              if (!powered.has(sh.id) && !sh.powerSource.connectedOutletId) {
+                sh.powerSource.daisyChainedFrom = null;
+              }
+            }
+          }),
 
         // Derived ------------------------------------------------------------
         getRoomAreaSqFt: () => polygonSquareFeet(get().room.polygonVertices),

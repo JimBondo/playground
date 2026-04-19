@@ -12,9 +12,11 @@ export function Toolbar() {
   const zoom = useLayoutStore((s) => s.view.zoom);
   const showGrid = useLayoutStore((s) => s.view.showGrid);
   const showMeasurements = useLayoutStore((s) => s.view.showMeasurements);
+  const activeMode = useLayoutStore((s) => s.view.activeMode);
   const toggleGrid = useLayoutStore((s) => s.toggleGrid);
   const toggleMeasurements = useLayoutStore((s) => s.toggleMeasurements);
   const setZoom = useLayoutStore((s) => s.setZoom);
+  const setActiveMode = useLayoutStore((s) => s.setActiveMode);
   const areaSqFt = useLayoutStore((s) => s.getRoomAreaSqFt());
   const projectName = useLayoutStore((s) => s.project.name);
 
@@ -63,6 +65,19 @@ export function Toolbar() {
           </button>
           <button onClick={toggleMeasurements} className={iconButton()}>
             Dims: {showMeasurements ? "on" : "off"}
+          </button>
+          <button
+            onClick={() =>
+              setActiveMode(activeMode === "wire" ? "select" : "wire")
+            }
+            className={iconButton(
+              activeMode === "wire"
+                ? "border-[#6366f1] text-[#6366f1]"
+                : "",
+            )}
+            title="Wire Mode (W)"
+          >
+            Wire
           </button>
         </div>
       </header>

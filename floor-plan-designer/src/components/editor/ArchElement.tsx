@@ -5,6 +5,7 @@ import type { KonvaEventObject } from "konva/lib/Node";
 
 import type { ArchElement as ArchElementData } from "@/types";
 import { useLayoutStore } from "@/store/useLayoutStore";
+import { useEditorStore } from "@/store/useEditorStore";
 import { collides, archElementBox } from "@/lib/collision";
 import { EDITOR_COLORS } from "@/lib/constants";
 
@@ -40,6 +41,29 @@ export function ArchElementNode({
 
   const handleClick = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    const state = useLayoutStore.getState();
+    const wip = useEditorStore.getState().wireInProgress;
+    if (
+      state.view.activeMode === "wire" &&
+      wip &&
+      element.type === "outlet"
+    ) {
+      // Complete the wire.
+      state.addWire({
+        startShelfId: wip.startShelfId,
+        endOutletId: element.id,
+        joints: wip.joints,
+      });
+      state.updateShelf(wip.startShelfId, {
+        powerSource: {
+          connectedOutletId: element.id,
+          daisyChainedFrom: null,
+        },
+      });
+      useEditorStore.getState().cancelWire();
+      state.propagatePower();
+      return;
+    }
     if (e.evt.shiftKey) {
       addToSelection({ type: "archElement", id: element.id });
     } else {
