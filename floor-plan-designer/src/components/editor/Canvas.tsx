@@ -6,11 +6,15 @@ import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 import { useLayoutStore } from "@/store/useLayoutStore";
+import { useEditorStore } from "@/store/useEditorStore";
 import { useSpaceKey } from "@/hooks/useSpaceKey";
 import { GridBackground } from "./GridBackground";
 import { RoomPolygon } from "./RoomPolygon";
 import { MeasurementOverlay } from "./MeasurementOverlay";
 import { ArchElementNode } from "./ArchElement";
+import { ShelfSegmentNode } from "./ShelfSegment";
+import { AlignmentGuides } from "./AlignmentGuides";
+import { SelectionBox } from "./SelectionBox";
 import {
   EDITOR_COLORS,
   ARCH_ELEMENT_DEFAULTS,
@@ -24,7 +28,9 @@ import {
   archElementBox,
   shelfBox,
   findNonCollidingPosition,
+  rotatedAabb,
 } from "@/lib/collision";
+import type { Selection } from "@/types";
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 4;
@@ -38,6 +44,7 @@ export default function Canvas() {
   const view = useLayoutStore((s) => s.view);
   const room = useLayoutStore((s) => s.room);
   const archElements = useLayoutStore((s) => s.archElements);
+  const shelvingSegments = useLayoutStore((s) => s.shelvingSegments);
   const selection = useLayoutStore((s) => s.selection);
   const setZoom = useLayoutStore((s) => s.setZoom);
   const setPan = useLayoutStore((s) => s.setPan);
@@ -45,6 +52,10 @@ export default function Canvas() {
   const addArchElement = useLayoutStore((s) => s.addArchElement);
   const addShelf = useLayoutStore((s) => s.addShelf);
   const clearSelection = useLayoutStore((s) => s.clearSelection);
+  const setSelection = useLayoutStore((s) => s.setSelection);
+
+  const selectionBoxState = useEditorStore((s) => s.selectionBox);
+  const setSelectionBox = useEditorStore((s) => s.setSelectionBox);
 
   const spaceHeld = useSpaceKey();
   const [middleHeld, setMiddleHeld] = useState(false);
@@ -102,50 +113,129 @@ export default function Canvas() {
     [view.zoom, view.panX, view.panY, view.basePixelsPerInch, setZoom, setPan],
   );
 
-  const handleMouseDown = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    if (e.evt.button === 1) {
-      e.evt.preventDefault();
-      setMiddleHeld(true);
-    }
-  }, []);
-  const handleMouseUp = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    if (e.evt.button === 1) setMiddleHeld(false);
-  }, []);
-
   const panMode = spaceHeld || middleHeld;
 
-  const handleStageDragEnd = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
-      if (e.target === stageRef.current) setPan(e.target.x(), e.target.y());
+  // ----- Selection-box drag -----
+  const handleStageMouseDown = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      if (e.evt.button === 1) {
+        e.evt.preventDefault();
+        setMiddleHeld(true);
+        return;
+      }
+      if (panMode) return;
+      if (e.target !== stageRef.current) return;
+      // Start selection box in stage-local coords.
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      // Pointer is viewport-relative; subtract stage position to get local.
+      const stageX = pointer.x - stage.x();
+      const stageY = pointer.y - stage.y();
+      setSelectionBox({
+        active: true,
+        startX: stageX,
+        startY: stageY,
+        currentX: stageX,
+        currentY: stageY,
+      });
     },
-    [setPan],
+    [panMode, setSelectionBox],
   );
+
+  const handleStageMouseMove = useCallback(() => {
+    const box = useEditorStore.getState().selectionBox;
+    if (!box || !box.active) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    const stageX = pointer.x - stage.x();
+    const stageY = pointer.y - stage.y();
+    setSelectionBox({ ...box, currentX: stageX, currentY: stageY });
+  }, [setSelectionBox]);
+
+  const handleStageMouseUp = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      if (e.evt.button === 1) setMiddleHeld(false);
+      const box = useEditorStore.getState().selectionBox;
+      if (!box || !box.active) return;
+      setSelectionBox(null);
+      const x1 = Math.min(box.startX, box.currentX);
+      const y1 = Math.min(box.startY, box.currentY);
+      const x2 = Math.max(box.startX, box.currentX);
+      const y2 = Math.max(box.startY, box.currentY);
+      // Ignore tiny boxes (treat as click).
+      if (x2 - x1 < 3 && y2 - y1 < 3) return;
+      // Convert box to inches and test containment.
+      const s = useLayoutStore.getState();
+      const ppi = s.view.basePixelsPerInch * s.view.zoom;
+      const inchBox = {
+        x: x1 / ppi,
+        y: y1 / ppi,
+        width: (x2 - x1) / ppi,
+        height: (y2 - y1) / ppi,
+      };
+      const hit: Selection = [];
+      for (const el of s.archElements) {
+        const a = rotatedAabb(archElementBox(el));
+        if (
+          a.x >= inchBox.x &&
+          a.y >= inchBox.y &&
+          a.x + a.width <= inchBox.x + inchBox.width &&
+          a.y + a.height <= inchBox.y + inchBox.height
+        ) {
+          hit.push({ type: "archElement", id: el.id });
+        }
+      }
+      for (const sh of s.shelvingSegments) {
+        const a = rotatedAabb(shelfBox(sh));
+        if (
+          a.x >= inchBox.x &&
+          a.y >= inchBox.y &&
+          a.x + a.width <= inchBox.x + inchBox.width &&
+          a.y + a.height <= inchBox.y + inchBox.height
+        ) {
+          hit.push({ type: "shelf", id: sh.id });
+        }
+      }
+      setSelection(hit);
+    },
+    [setSelectionBox, setSelection],
+  );
+
   const handleStageDragMove = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
       if (e.target === stageRef.current) setPan(e.target.x(), e.target.y());
     },
     [setPan],
   );
-
-  // Empty-space click clears selection.
-  const handleStageClick = useCallback(
-    (e: KonvaEventObject<MouseEvent>) => {
-      if (e.target === stageRef.current) {
-        clearSelection();
-      }
+  const handleStageDragEnd = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (e.target === stageRef.current) setPan(e.target.x(), e.target.y());
     },
-    [clearSelection],
+    [setPan],
   );
 
-  // HTML5 drop from the library.
+  const handleStageClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      if (panMode) return;
+      // Only clear on pure empty-space click (not after a selection-box drag).
+      if (e.target === stageRef.current && !selectionBoxState?.active) {
+        if (!e.evt.shiftKey) clearSelection();
+      }
+    },
+    [clearSelection, panMode, selectionBoxState],
+  );
+
+  // ----- Library drop -----
   const screenToInches = (clientX: number, clientY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return null;
-    const screenX = clientX - rect.left;
-    const screenY = clientY - rect.top;
     return {
-      x: (screenX - view.panX) / effectivePPI,
-      y: (screenY - view.panY) / effectivePPI,
+      x: (clientX - rect.left - view.panX) / effectivePPI,
+      y: (clientY - rect.top - view.panY) / effectivePPI,
     };
   };
 
@@ -162,7 +252,7 @@ export default function Canvas() {
     const dropPoint = screenToInches(e.clientX, e.clientY);
     if (!dropPoint) return;
 
-    const shelvingSegments = useLayoutStore.getState().shelvingSegments;
+    const storeState = useLayoutStore.getState();
 
     if (payload.kind === "arch") {
       const defaults = ARCH_ELEMENT_DEFAULTS[payload.type];
@@ -175,9 +265,9 @@ export default function Canvas() {
       };
       const placed = findNonCollidingPosition(box, {
         selfId: null,
-        archElements,
-        shelvingSegments,
-        roomVertices: room.polygonVertices,
+        archElements: storeState.archElements,
+        shelvingSegments: storeState.shelvingSegments,
+        roomVertices: storeState.room.polygonVertices,
       });
       const id = addArchElement({
         type: payload.type,
@@ -187,11 +277,25 @@ export default function Canvas() {
         widthInches: defaults.widthInches,
         depthInches: defaults.depthInches,
       });
-      useLayoutStore
-        .getState()
-        .setSelection([{ type: "archElement", id }]);
-    } else if (payload.kind === "shelf") {
+      setSelection([{ type: "archElement", id }]);
+    } else {
       const defaults = SHELF_DEFAULTS[payload.type];
+      // Lit-shelf validation: require at least one outlet.
+      if (
+        payload.type === "litShelf" &&
+        !storeState.archElements.some((e) => e.type === "outlet")
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("fpd:toast", {
+            detail: {
+              kind: "warn",
+              message:
+                "Add an electrical outlet before placing lit shelves.",
+            },
+          }),
+        );
+        return;
+      }
       const box = {
         x: dropPoint.x,
         y: dropPoint.y,
@@ -201,9 +305,9 @@ export default function Canvas() {
       };
       const placed = findNonCollidingPosition(box, {
         selfId: null,
-        archElements,
-        shelvingSegments,
-        roomVertices: room.polygonVertices,
+        archElements: storeState.archElements,
+        shelvingSegments: storeState.shelvingSegments,
+        roomVertices: storeState.room.polygonVertices,
       });
       const id = addShelf({
         type: payload.type,
@@ -216,10 +320,8 @@ export default function Canvas() {
         powerSource: { connectedOutletId: null, daisyChainedFrom: null },
         snappedConnections: { leftId: null, rightId: null },
       });
-      useLayoutStore.getState().setSelection([{ type: "shelf", id }]);
+      setSelection([{ type: "shelf", id }]);
     }
-    // Keep for Step 4 reference — suppresses unused lint.
-    void shelfBox;
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -251,11 +353,12 @@ export default function Canvas() {
           y={view.panY}
           draggable={panMode}
           onWheel={handleWheel}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
+          onMouseDown={handleStageMouseDown}
+          onMouseMove={handleStageMouseMove}
+          onMouseUp={handleStageMouseUp}
           onClick={handleStageClick}
           onTap={(e) => {
-            if (e.target === stageRef.current) clearSelection();
+            if (e.target === stageRef.current && !panMode) clearSelection();
           }}
           onDragMove={handleStageDragMove}
           onDragEnd={handleStageDragEnd}
@@ -285,12 +388,27 @@ export default function Canvas() {
                 selected={selectedIds.has(el.id)}
               />
             ))}
+            {shelvingSegments.map((sh) => (
+              <ShelfSegmentNode
+                key={sh.id}
+                shelf={sh}
+                pixelsPerInch={effectivePPI}
+                selected={selectedIds.has(sh.id)}
+              />
+            ))}
             {view.showMeasurements ? (
               <MeasurementOverlay
                 vertices={room.polygonVertices}
                 pixelsPerInch={effectivePPI}
               />
             ) : null}
+            <AlignmentGuides
+              width={size.width}
+              height={size.height}
+              offsetX={view.panX}
+              offsetY={view.panY}
+            />
+            <SelectionBox />
           </Layer>
         </Stage>
       ) : null}
